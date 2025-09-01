@@ -1,0 +1,116 @@
+model:
+  name: deepseek-r1:14b
+  temperature: 0.3
+  top_p: 0.9
+  num_ctx: 4096
+  num_predict: 320
+  seed: 42
+
+rails:
+  input:
+    flows: []
+  output:
+    flows: []
+
+prompts:
+  create_meta: |
+    You are a Secondary PE expert. Return ONLY YAML with these keys:
+    title: "<short>"
+    context: "<grade/group & main aim>"
+    duration_minutes: 55
+    equipment: ["item1","item2","item3","item4"]
+
+    Topic: {tema}
+    Level: {nivel}
+    Context: {contexto}
+
+  create_phase: |
+    Return ONLY YAML for ONE phase with keys:
+      name: "{phase_name}"
+      minutes: {minutes}
+      activities:
+        - objective: "<1 sentence>"
+          steps: ["step 1","step 2","step 3"]
+          organization: "<space/groups>"
+          safety: "<1 line>"
+    If phase is "Main", also include:
+          differentiation:
+            easy: "<1 line>"
+            medium: "<1 line>"
+            hard: "<1 line>"
+    If phase is "Cool-down", also include:
+          breathing: "<1 line>"
+          reflection_prompt: "<1 question>"
+
+    Constraints:
+    - Exactly ONE activity in the list.
+    - Keep lists <=3 items.
+    - Feasible in a school gym.
+    Topic: {tema}
+    Level: {nivel}
+    Context: {contexto}
+
+  evaluate_criterion: |
+    You are an assessment expert (LOMLOE). Return ONLY JSON for ONE criterion:
+    {{
+      "name": "{criterion}",
+      "levels": [
+        {{"level":1, "descriptor":"<observable, measurable>"}},
+        {{"level":2, "descriptor":"<observable, measurable>"}},
+        {{"level":3, "descriptor":"<observable, measurable>"}},
+        {{"level":4, "descriptor":"<observable, measurable>"}}
+      ]
+    }}
+    Rules:
+    - Use operational Spanish verbs (mantiene, coordina, alinea, flexiona...).
+    - Focus on volleyball jump technique when relevant (batida/impulso/aterrizaje).
+    - No prose around JSON. No backticks.
+
+  evaluate_usage_notes: |
+    Return ONLY a short Spanish sentence with usage notes for the rubric (observación, registro y seguridad).
+
+  correct_one: |
+    Eres un evaluador de Educación Física en Secundaria. Evalúa la tarea usando esta rúbrica (escala 1–4):
+
+    RÚBRICA (YAML):
+    {rubric_text}
+
+    TAREA DEL ESTUDIANTE:
+    {task_text}
+
+    Instrucciones:
+    - Devuelve SOLO JSON.
+    - "score" ∈ {1,2,3,4}.
+    - "reasons" ≤ 40 palabras, español claro, términos de EF (técnica, coordinación, control, postura…).
+
+    Estructura JSON:
+    {{
+      "score": <1-4>,
+      "reasons": "<≤40 palabras>"
+    }}
+
+  feedback_student: |
+    Eres profesor de Educación Física. Genera feedback breve al estudiante usando esta corrección:
+
+    CORRECCIÓN (JSON):
+    {corrections}
+
+    Requisitos:
+    - Español.
+    - ≤50 palabras.
+    - Formato exacto:
+      Fortalezas: <texto>. Áreas de mejora: <texto>.
+
+    Devuelve SOLO texto plano con ese formato en una sola línea.
+
+  feedback_class: |
+    Eres profesor de Educación Física. Resume tendencias de la clase a partir de estas correcciones:
+
+    CORRECCIONES (JSON LIST):
+    {corrections}
+
+    Requisitos:
+    - Español.
+    - ≤60 palabras.
+    - Menciona patrones de fortaleza y áreas de mejora comunes, usando terminología de EF (control, coordinación, postura, visión de juego…).
+    - Devuelve SOLO texto plano, una sola línea.

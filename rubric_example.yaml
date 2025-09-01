@@ -1,0 +1,21 @@
+criterios:
+  - nombre: "Control del balón"
+    niveles:
+      - puntuacion: 1
+        desc: "No controla el balón; frecuentes pérdidas."
+      - puntuacion: 2
+        desc: "Control básico; errores al aumentar velocidad."
+      - puntuacion: 3
+        desc: "Buen control general; algunos fallos bajo presión."
+      - puntuacion: 4
+        desc: "Excelente control incluso en situaciones dinámicas."
+  - nombre: "Técnica de salto"
+    niveles:
+      - puntuacion: 1
+        desc: "Postura deficiente; falta coordinación."
+      - puntuacion: 2
+        desc: "Postura aceptable; impulso débil; caída inestable."
+      - puntuacion: 3
+        desc: "Buena técnica; pequeños fallos; caída mayormente segura."
+      - puntuacion: 4
+        desc: "Técnica sólida; impulso eficaz; aterrizaje seguro con flexión."

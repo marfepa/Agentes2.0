@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="es" data-theme="pastel">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>EF-AI — Agents (Ollama local)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet"/>
+  <style>
+    .bubble{border-radius:14px;padding:10px 14px;background:#fff}
+    .bubble.user{background:#e6e9ff}
+    .token{white-space:pre-wrap}
+    .hidden-think{display:none;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f5f7fb;border-radius:10px;padding:10px;margin-top:8px}
+    .src-card{border:1px solid #e8e8ef;border-radius:10px;padding:10px;background:#fcfcff}
+    .card-log{border:1px solid #e8e8ef;border-radius:12px;padding:12px;background:#fff}
+    .kbd{border-radius:8px;padding:2px 6px;background:#f3f4f6;border:1px solid #e5e7eb;font-family:ui-monospace}
+    .spin{animation:spin 1s linear infinite}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-[#eef5ff] to-[#f8fbff]">
+<div class="max-w-6xl mx-auto px-4 py-4">
+  <div class="flex items-center gap-3 mb-4">
+    <div class="text-2xl">🏫</div>
+    <h1 class="text-2xl font-semibold">EF-AI — Agents (Ollama local)</h1>
+    <span id="health" class="ml-auto text-xs px-2 py-1 rounded bg-gray-200">Comprobando Ollama…</span>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs tabs-lifted mb-4">
+    <button id="nav-chat" class="tab tab-lg tab-active">🔎 Chat RAG</button>
+    <button id="nav-rubric" class="tab tab-lg">📄 Rúbricas / Corrector</button>
+    <button id="nav-plan" class="tab tab-lg">🗓️ Planificador</button>
+    <button id="nav-agent" class="tab tab-lg">🧠 Agente</button>
+    <button id="nav-settings" class="tab tab-lg">⚙️ Ajustes</button>
+  </div>
+
+  <!-- ===== Chat RAG ===== -->
+  <div id="panel-chat" class="bg-base-100 border-base-300 rounded-box p-4">
+    <div class="grid grid-cols-12 gap-4">
+      <aside class="col-span-12 lg:col-span-3 space-y-3">
+        <div class="card bg-white shadow">
+          <div class="card-body space-y-2">
+            <label class="text-sm font-semibold">Unidad/Tag</label>
+            <input id="unit" class="input input-bordered input-sm" value="General"/>
+            <label class="text-sm font-semibold mt-3">k</label>
+            <input id="k" type="range" min="1" max="6" value="3" class="range range-sm"/>
+            <div class="flex gap-2 items-center mt-2">
+              <label class="text-sm font-semibold">Modelo</label>
+              <select id="model" class="select select-bordered select-sm grow">
+                <option value="deepseek-r1:14b" selected>deepseek-r1:14b</option>
+              </select>
+            </div>
+            <label class="label cursor-pointer mt-1">
+              <span class="label-text">Usar LLM si no hay contexto</span>
+              <input id="fallback" type="checkbox" class="toggle toggle-primary" checked/>
+            </label>
+            <label class="label cursor-pointer">
+              <span class="label-text">Mostrar fuentes</span>
+              <input id="show-sources" type="checkbox" class="toggle toggle-primary" checked/>
+            </label>
+          </div>
+        </div>
+
+        <div class="card bg-white shadow">
+          <div class="card-body">
+            <h3 class="font-semibold mb-2">📥 Indexador</h3>
+            <input id="idx-unit" class="input input-bordered input-sm mb-2" value="General"/>
+            <input id="idx-files" type="file" class="file-input file-input-bordered file-input-sm w-full" multiple/>
+            <button class="btn btn-sm btn-primary mt-2" onclick="doIndex()">Añadir al índice</button>
+            <div id="idx-log" class="text-xs mt-2 text-gray-500"></div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="col-span-12 lg:col-span-9">
+        <div id="chat" class="space-y-3 h-[520px] overflow-y-auto p-1 bg-white rounded shadow-inner"></div>
+        <div class="mt-2 flex gap-2">
+          <input id="question" class="input input-bordered w-full" placeholder="Escribe tu pregunta…"/>
+          <button class="btn btn-primary" onclick="ask()">Preguntar</button>
+        </div>
+        <div class="text-xs text-gray-500 mt-1">Usando k=<span id="kval">3</span>. Modelo: <span id="modelName">deepseek-r1:14b</span></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ===== Rúbricas / Corrector ===== -->
+  <div id="panel-rubric" class="hidden bg-base-100 border-base-300 rounded-box p-4">
+    <div class="grid grid-cols-12 gap-4">
+      <div class="col-span-12 lg:col-span-4">
+        <textarea id="rubric" class="textarea textarea-bordered w-full h-64" placeholder="Pega tu YAML de rúbrica…"></textarea>
+        <input id="rubric-course" class="input input-bordered input-sm mt-2 w-full" placeholder="Curso"/>
+        <input id="rubric-unit" class="input input-bordered input-sm mt-2 w-full" placeholder="Unidad/Tag"/>
+        <button class="btn btn-sm btn-primary mt-3" onclick="genRubric()">Generar DOCX</button>
+        <div id="rubric-msg" class="text-sm mt-2"></div>
+      </div>
+      <div class="col-span-12 lg:col-span-8">
+        <h3 class="font-semibold mb-2">🧪 Corrector</h3>
+        <textarea id="rubric-text" class="textarea textarea-bordered w-full h-40" placeholder="Rúbrica…"></textarea>
+        <textarea id="student-text" class="textarea textarea-bordered w-full h-40 mt-2" placeholder="Trabajo del estudiante…"></textarea>
+        <button class="btn btn-sm btn-secondary mt-3" onclick="correct()">Corregir</button>
+        <pre id="correct-out" class="mt-2 whitespace-pre-wrap"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Planificador ===== -->
+  <div id="panel-plan" class="hidden bg-base-100 border-base-300 rounded-box p-4">
+    <h3 class="font-semibold text-lg mb-3">Planificador semanal (PDF → Excel)</h3>
+    <div class="grid grid-cols-12 gap-4">
+      <div class="col-span-12 lg:col-span-8">
+        <div class="grid grid-cols-2 gap-3">
+          <input id="plan-course" class="input input-bordered" placeholder="Curso (p. ej. 4ESO)"/>
+          <input id="plan-start" type="date" class="input input-bordered"/>
+          <input id="plan-days" class="input input-bordered col-span-2" placeholder="Días (coma): Lunes, Miércoles"/>
+          <input id="plan-times" class="input input-bordered col-span-2" placeholder="Horarios (coma HH:MM-HH:MM): 08:00-09:00, 12:25-13:20"/>
+        </div>
+        <label class="label cursor-pointer mt-2">
+          <span class="label-text">Usar DeepSeek para extraer sesiones</span>
+          <input id="plan-use-llm" type="checkbox" class="toggle toggle-primary" checked/>
+        </label>
+        <label class="label cursor-pointer mt-2">
+          <span class="label-text">Continuar desde última semana del curso</span>
+          <input id="plan-continue" type="checkbox" class="toggle toggle-primary" checked/>
+        </label>
+        <input id="plan-files" type="file" class="file-input file-input-bordered w-full mt-2" multiple accept=".pdf,.docx,.doc,.txt"/>
+        <button class="btn btn-primary mt-3" onclick="submitPlan()">Generar / Actualizar Excel</button>
+        <div id="plan-msg" class="text-sm mt-2"></div>
+        <div id="plan-download" class="mt-2"></div>
+      </div>
+      <div class="col-span-12 lg:col-span-4 text-sm text-gray-500">
+        <p>➤ El Excel se guarda en tu Escritorio como <code>EF_PlanSemanal.xlsx</code>.</p>
+        <p class="mt-2">➤ Si un PDF es de otro curso, se detecta y planifica en su propia serie de semanas.</p>
+        <p class="mt-2">➤ Con <b>“Continuar desde última semana”</b> no se reinicia la numeración.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Agente ===== -->
+  <div id="panel-agent" class="hidden bg-base-100 border-base-300 rounded-box p-4">
+    <div class="grid grid-cols-12 gap-4">
+      <div class="col-span-12 lg:col-span-5">
+        <h3 class="font-semibold text-lg mb-2">🧠 Super-agente (autónomo)</h3>
+        <textarea id="agent-goal" class="textarea textarea-bordered w-full h-48" placeholder="Describe el objetivo: 
+Planifica 4ESO con los PDFs subidos. Fecha inicio 2025-09-08. Días Lunes, Miércoles. Horario 08:00-09:00. Continúa desde la última semana y dime cuántas semanas añadiste."></textarea>
+        <div class="flex gap-2 mt-2 items-center">
+          <label class="text-sm font-semibold">Modelo</label>
+          <select id="agent-model" class="select select-bordered select-sm">
+            <option value="deepseek-r1:14b" selected>deepseek-r1:14b</option>
+          </select>
+          <button class="btn btn-primary btn-sm ml-auto" onclick="runAgent()">Lanzar agente</button>
+        </div>
+        <div class="text-xs text-gray-500 mt-2">
+          Consejos: escribe objetivos claros. El agente puede listar archivos, leer PDFs, buscar en el índice FAISS, planificar en Excel y recordar hechos.
+        </div>
+      </div>
+      <div class="col-span-12 lg:col-span-7">
+        <h4 class="font-semibold mb-2">Ejecución</h4>
+        <div id="agent-status" class="text-sm mb-2"></div>
+        <div id="agent-steps" class="space-y-3 max-h-[520px] overflow-y-auto"></div>
+        <div id="agent-final" class="mt-3 hidden">
+          <div class="alert alert-success">
+            <span class="font-semibold">Respuesta final:</span>
+            <span id="agent-final-text"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Ajustes ===== -->
+  <div id="panel-settings" class="hidden bg-base-100 border-base-300 rounded-box p-4">
+    <pre class="text-sm">
+OPENAI_BASE_URL = <span id="env-base"></span>
+Modelos disponibles = <span id="env-model"></span>
+Índice = <code>faiss_index_EF</code> — Subidas: <code>/uploads</code> — Salidas: <code>/outputs</code>
+    </pre>
+  </div>
+</div>
+
+<script>
+/* ---- Tabs ---- */
+function showPanel(id){
+  for(const p of ['panel-chat','panel-rubric','panel-plan','panel-agent','panel-settings']){
+    document.getElementById(p).classList.add('hidden');
+  }
+  document.getElementById(id).classList.remove('hidden');
+}
+document.getElementById('nav-chat').onclick = ()=> showPanel('panel-chat');
+document.getElementById('nav-rubric').onclick = ()=> showPanel('panel-rubric');
+document.getElementById('nav-plan').onclick = ()=> showPanel('panel-plan');
+document.getElementById('nav-agent').onclick = ()=> showPanel('panel-agent');
+document.getElementById('nav-settings').onclick = ()=> showPanel('panel-settings');
+showPanel('panel-chat');
+
+/* ---- Helpers ---- */
+const el = (id)=>document.getElementById(id);
+const appendMsg = (role, html, think='')=>{
+  const wrap = document.createElement('div');
+  wrap.className = 'bubble ' + (role==='user'?'user':'');
+  wrap.innerHTML = html;
+  if(think){
+    const btn = document.createElement('button');
+    btn.className='btn btn-xs mt-2';
+    btn.textContent='Razonamiento del modelo (oculto)';
+    const pre = document.createElement('pre');
+    pre.className='hidden-think';
+    pre.textContent = think;
+    btn.onclick=()=>{ pre.style.display = pre.style.display==='block'?'none':'block'; };
+    wrap.appendChild(btn); wrap.appendChild(pre);
+  }
+  el('chat').appendChild(wrap);
+  el('chat').scrollTop = el('chat').scrollHeight;
+};
+
+/* ---- Health ---- */
+async function health(){
+  try{
+    const r = await fetch('/api/health');
+    const j = await r.json();
+    el('health').textContent = j.status==='ok' ? 'Ollama OK' : 'Ollama DOWN';
+    el('env-base').textContent = j.base_url || '';
+    el('env-model').textContent = j.status==='ok' && j.models ? (j.models.join(', ') || '-') : '-';
+    // poblar selects si hay más modelos
+    const modelSel = el('model');
+    const agentSel = el('agent-model');
+    if (j.models && Array.isArray(j.models) && j.models.length){
+      modelSel.innerHTML = ''; agentSel.innerHTML = '';
+      j.models.forEach(m=>{
+        const o1 = document.createElement('option'); o1.value=m.model||m; o1.textContent=m.model||m;
+        const o2 = document.createElement('option'); o2.value=m.model||m; o2.textContent=m.model||m;
+        modelSel.appendChild(o1); agentSel.appendChild(o2);
+      });
+    }
+  }catch(e){
+    el('health').textContent = 'Ollama DOWN';
+  }
+}
+health();
+
+/* ---- Indexador ---- */
+async function doIndex(){
+  const fd = new FormData();
+  fd.append('unit', el('idx-unit').value || 'General');
+  for(const f of el('idx-files').files) fd.append('files', f);
+  el('idx-log').textContent = 'Indexando…';
+  const r = await fetch('/api/index', {method:'POST', body:fd});
+  const j = await r.json();
+  el('idx-log').textContent = j.ok ? `Añadidos ${j.added} chunks a '${j.unit}'.` : ('Error: '+j.error);
+}
+
+/* ---- Chat (streaming) ---- */
+el('k').addEventListener('input', ()=> el('kval').textContent = el('k').value);
+el('model').addEventListener('change', ()=> el('modelName').textContent = el('model').value);
+
+async function ask(){
+  const q = el('question').value.trim(); if(!q) return;
+  appendMsg('user', `<div class="font-semibold">Tú</div><div>${q}</div>`);
+  const unit = el('unit').value || 'General';
+  const k = parseInt(el('k').value);
+  const model = el('model').value;
+  const show = el('show-sources').checked;
+  const fallback = el('fallback').checked;
+
+  el('question').value = '';
+  const botBubble = document.createElement('div');
+  botBubble.className = 'bubble'; botBubble.innerHTML = `<div class="token"></div>`;
+  el('chat').appendChild(botBubble);
+
+  const resp = await fetch('/api/ask_stream',{method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({question:q, unit, k, model, fallback})
+  });
+
+  const reader = resp.body.getReader(); const dec = new TextDecoder();
+  let buf = '';
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    buf += dec.decode(value, {stream:true});
+    const parts = buf.split("\n\n");
+    buf = parts.pop();
+    for(const part of parts){
+      if(!part.startsWith("data:")) continue;
+      let data;
+      try{ data = JSON.parse(part.slice(5).trim()); }catch(e){ continue; }
+      if(data.token){
+        botBubble.querySelector('.token').textContent += data.token;
+      }
+      if(data.final !== undefined){
+        botBubble.querySelector('.token').textContent = data.final;
+        if(show && Array.isArray(data.sources) && data.sources.length){
+          const box = document.createElement('div');
+          box.className = 'src-card mt-2 text-xs';
+          box.innerHTML = `<div class="font-semibold mb-1">Fuentes (${data.sources.length})</div>`+
+            data.sources.map(s=>`<div class="mb-1"><b>${s.unidad}</b> — ${s.source}<br/><span class="text-gray-500">${s.snippet}</span></div>`).join('');
+          botBubble.appendChild(box);
+        }
+      }
+    }
+  }
+  el('chat').scrollTop = el('chat').scrollHeight;
+}
+
+/* ---- Rúbricas ---- */
+async function genRubric(){
+  const fd = new FormData();
+  fd.append('yaml_text', el('rubric').value || '');
+  fd.append('course', el('rubric-course').value || '');
+  fd.append('unit', el('rubric-unit').value || '');
+  const r = await fetch('/api/rubric', {method:'POST', body:fd});
+  const j = await r.json();
+  el('rubric-msg').innerHTML = j.ok ? `Descargar: <a class="link" href="${j.path}">${j.path}</a>` : ('Error: '+j.error);
+}
+async function correct(){
+  const fd = new FormData();
+  fd.append('model', el('model').value);
+  fd.append('rubric_text', el('rubric-text').value || '');
+  fd.append('student_text', el('student-text').value || '');
+  const r = await fetch('/api/correct', {method:'POST', body:fd});
+  const j = await r.json();
+  el('correct-out').textContent = j.ok ? j.result : ('Error: '+j.error);
+}
+
+/* ---- Planificador ---- */
+async function submitPlan(){
+  const fd = new FormData();
+  fd.append('course', el('plan-course').value || '4ESO');
+  fd.append('start_date', el('plan-start').value);
+  fd.append('days_csv', el('plan-days').value);
+  fd.append('times_csv', el('plan-times').value);
+  fd.append('use_llm', el('plan-use-llm').checked ? 'true' : 'false');
+  fd.append('continue_from_last', el('plan-continue').checked ? 'true' : 'false');
+  const files = el('plan-files').files;
+  if(!files || files.length === 0){
+    el('plan-msg').innerHTML = `<span class="text-error">Selecciona al menos un PDF.</span>`;
+    return;
+  }
+  for(const f of files) fd.append('files', f);
+
+  el('plan-msg').textContent = 'Procesando…';
+  try{
+    const r = await fetch('/api/planify', {method:'POST', body:fd});
+    const j = await r.json();
+    if(!j.ok){
+      el('plan-msg').innerHTML = `<span class="text-error">Error: ${j.error}</span>`;
+      return;
+    }
+    el('plan-msg').innerHTML = `<span class="text-success">OK.</span> ${Object.entries(j.resumen || {}).map(([k,v])=>`${k}: ${JSON.stringify(v)}`).join(' · ')}`;
+    el('plan-download').innerHTML = `<a class="link" href="${j.download}" target="_blank">Descargar copia: ${j.download}</a><br/>Guardado en escritorio: <code>${j.desktop_path}</code>`;
+  }catch(e){
+    el('plan-msg').innerHTML = `<span class="text-error">Error al llamar al servidor: ${e.message}</span>`;
+  }
+}
+
+/* ---- Agente autónomo ---- */
+function stepCardHTML(step, idx){
+  if(step.final !== undefined){
+    return `<div class="card-log border-success/40">
+      <div class="font-semibold mb-1">Paso ${idx}: <span class="text-success">Final</span></div>
+      <div>${step.final}</div>
+    </div>`;
+  }
+  const args = JSON.stringify(step.args ?? {}, null, 2);
+  const res  = JSON.stringify(step.result ?? {}, null, 2);
+  return `<div class="card-log">
+    <div class="font-semibold mb-1">Paso ${idx}: herramienta <span class="kbd">${step.tool}</span></div>
+    <details class="mb-1">
+      <summary class="cursor-pointer">Argumentos</summary>
+      <pre class="text-xs whitespace-pre-wrap mt-1">${args}</pre>
+    </details>
+    <details>
+      <summary class="cursor-pointer">Resultado</summary>
+      <pre class="text-xs whitespace-pre-wrap mt-1">${res}</pre>
+    </details>
+  </div>`;
+}
+
+async function runAgent(){
+  const goal = el('agent-goal').value.trim();
+  if(!goal){ el('agent-status').innerHTML = `<span class="text-error">Escribe un objetivo.</span>`; return; }
+  const model = el('agent-model').value;
+
+  el('agent-status').innerHTML = `<span class="loading loading-spinner loading-sm mr-2"></span> Ejecutando…`;
+  el('agent-steps').innerHTML = '';
+  el('agent-final').classList.add('hidden');
+  try{
+    const fd = new FormData();
+    fd.append('goal', goal); fd.append('model', model);
+    const r = await fetch('/api/agent', {method:'POST', body:fd});
+    const j = await r.json();
+
+    if(!j.ok){
+      el('agent-status').innerHTML = `<span class="text-error">Error: ${j.error||'desconocido'}</span>`;
+      return;
+    }
+    el('agent-status').innerHTML = `<span class="text-success">Completado.</span>`;
+    const steps = j.steps || [];
+    el('agent-steps').innerHTML = steps.map((s,i)=>stepCardHTML(s,i+1)).join('');
+    if(j.final){
+      el('agent-final-text').textContent = j.final;
+      el('agent-final').classList.remove('hidden');
+    }
+  }catch(e){
+    el('agent-status').innerHTML = `<span class="text-error">Fallo al llamar al agente: ${e.message}</span>`;
+  }
+}
+</script>
+</body>
+</html>
